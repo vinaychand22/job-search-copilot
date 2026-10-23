@@ -51,7 +51,12 @@ def main() -> None:
         details = re.findall(r"(quota_metric|quotaMetric|quota_id|quotaId|limit|model)['\"]?\s*[:=]\s*['\"]?([\w./-]+)", msg)
         if details:  # the useful part of quota errors is usually past the first few hundred characters
             print("  details: " + ", ".join(f"{k}={v}" for k, v in dict(details).items()))
-        print(f"  -> {explain(e)}")
+        if "PerDay" in msg:
+            print("  -> This is a DAILY limit for this model and it's used up. It resets at midnight Pacific time\n"
+                  "     (about 12:30-1:30 PM in India). Or switch FAST_MODEL/SMART_MODEL in .env to another model,\n"
+                  "     which has its own separate daily allowance.")
+        else:
+            print(f"  -> {explain(e)}")
         if "limit" in msg and re.search(r"limit['\"]?\s*[:=]\s*['\"]?0\b", msg):
             print("  -> limit is 0: this model has no free quota for your project. Try a 'flash-lite' model in .env.")
         return
