@@ -10,7 +10,7 @@ answers back. You need access to **one** model. You can switch any time by editi
 | Option | Cost | Privacy | Best for |
 |---|---|---|---|
 | **A. Gemini (Google)** | Free tier | Free-tier content may be used by Google to improve its products | Starting out, the matcher, the coach on demo data |
-| **B. Ollama (local)** | Free | Nothing leaves your Mac | Your real emails (tracker) |
+| **B. Ollama (local)** | Free | Nothing leaves your computer | Your real emails (tracker) |
 | **C. OpenAI** | Pay as you go, from $5 prepaid | Not used for training by default on the API | The best quality-to-cost ratio once you're serious |
 | **D. Azure OpenAI** | Needs an Azure subscription | Enterprise terms | Matching what employers run |
 | **E. Anthropic (Claude)** | Pay as you go | Not used for training by default on the API | An alternative to OpenAI |
@@ -27,15 +27,13 @@ Pricing and free tiers change; check the linked pages before you rely on them.
 1. Open **https://aistudio.google.com** and sign in with your Google account.
 2. Click **Get API key**, then **Create API key**. Accept the terms if asked.
 3. Copy the key (a long string). Treat it like a password.
-4. In the project folder:
+4. In the project folder, create your `.env` file and open it:
+   - Windows (PowerShell): `copy .env.example .env` then `notepad .env`
+   - macOS: `cp .env.example .env` then `open -e .env`
+
+   Paste the key after `GEMINI_API_KEY=` (no spaces) and save.
+5. Test it (the `.env` file is read automatically):
    ```bash
-   cp .env.example .env
-   open -e .env          # opens it in TextEdit
-   ```
-   Paste the key after `GEMINI_API_KEY=` and save.
-5. Load it and test:
-   ```bash
-   set -a; source .env; set +a
    python -m copilot.matcher.run copilot/matcher/data/sample_postings
    ```
 
@@ -45,15 +43,15 @@ demo data, not your personal email.
 
 ## B. Ollama (free, private, about 10 minutes)
 
-1. Download from **https://ollama.com/download** and install it like any Mac app.
-2. In Terminal, download a model. This is a one-time download of a few GB:
+1. Download from **https://ollama.com/download** (Windows and macOS) and install it.
+2. In a terminal (PowerShell on Windows), download a model. This is a one-time download of a few GB:
    ```bash
    ollama pull llama3.1:8b
    ```
 3. In `.env`, comment out the Gemini lines and uncomment the Ollama block (`LLM_PROVIDER=ollama`).
 4. Run as usual. Ollama must be running (it starts automatically after install).
 
-Small local models are less accurate than cloud ones. Run `python -m copilot.tracker.eval` with both and
+Local models need a reasonably powerful computer (16 GB RAM recommended), and small ones are less accurate than cloud ones. Run `python -m copilot.tracker.eval` with both and
 compare; the numbers tell you whether it's good enough.
 
 ## C. OpenAI API key (paid)

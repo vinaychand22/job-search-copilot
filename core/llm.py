@@ -29,6 +29,12 @@ from typing import Any, Protocol
 
 from core.tracing import Tracer
 
+try:  # read .env automatically on any OS (Windows, macOS, Linux) - no "source .env" needed
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:  # python-dotenv not installed: environment variables still work
+    pass
+
 PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
 FAST_MODEL = os.getenv("FAST_MODEL", "")    # cheap model: classification, extraction, critique
 SMART_MODEL = os.getenv("SMART_MODEL", "")  # stronger model: planning, writing

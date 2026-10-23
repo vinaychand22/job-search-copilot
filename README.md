@@ -63,27 +63,38 @@ Sanity check, offline: on the 12 bundled synthetic postings, the scoring rule ra
 postings first (precision@5 = 1.0, `make eval-matcher-offline`). I wrote those labels alongside the rule,
 so it only proves the rule behaves as designed. The real number comes from postings I label myself.
 
-## Quick start (macOS)
+## Quick start
 
-Requires Python 3.11 or newer (`python3 --version`; if older, `brew install python@3.12`).
+Requires Python 3.11 or newer and Git. Your `.env` file is loaded automatically.
 
+**Windows (PowerShell)**
+```powershell
+git clone https://github.com/vinaychand22/job-search-copilot.git; cd job-search-copilot
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m pytest -q          # 34 offline tests, no API key needed
+python -m copilot.demo       # builds a demo database
+$env:COPILOT_DB="data\demo.db"; streamlit run app.py
+```
+
+**macOS / Linux**
 ```bash
 git clone https://github.com/vinaychand22/job-search-copilot.git && cd job-search-copilot
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-make test          # 34 offline tests, no API key needed
-make demo          # builds a demo database and opens the dashboard
+make test && make demo
 ```
 
 ### Use it for real
 
 ```bash
+# copy the templates (Windows: use "copy" instead of "cp")
 cp config/profile.example.toml config/profile.toml   # edit: your skills, target roles, cities, minimum salary
 cp .env.example .env                                  # choose a model provider: see docs/SETUP.md (free options exist)
-set -a; source .env; set +a
 
-python -m copilot.folders ~/Documents/Resumes --dry-run   # preview the import of your old folders
-python -m copilot.folders ~/Documents/Resumes             # import them
+python -m copilot.folders "<path to your Resumes folder>" --dry-run   # preview the import of your old folders
+python -m copilot.folders "<path to your Resumes folder>"             # import them
 
 python -m copilot.tracker.run --max 100     # first Gmail sync (opens a browser once for consent)
 python -m copilot.matcher.run inbox/postings

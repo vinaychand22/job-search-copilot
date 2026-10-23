@@ -2,6 +2,7 @@ openai>=1.50          # OpenAI, Azure OpenAI, Gemini and Ollama all use this cli
 anthropic>=0.69       # only needed if LLM_PROVIDER=anthropic
 langgraph>=1.0        # career coach workflow
 pydantic>=2.7
+python-dotenv>=1.0   # loads .env automatically
 streamlit>=1.45
 pandas>=2.0
 google-api-python-client>=2.100
