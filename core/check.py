@@ -6,6 +6,7 @@ Run this first whenever something AI-related seems stuck.
 from __future__ import annotations
 
 import os
+import re
 import time
 
 from core.llm import FAST_MODEL, PROVIDER, SMART_MODEL, LLM
@@ -45,7 +46,14 @@ def main() -> None:
         r = LLM(max_calls=1).chat(model=FAST_MODEL, system="Reply with exactly: OK",
                                   messages=[{"role": "user", "content": "ping"}], max_tokens=20)
     except Exception as e:
-        print(f"FAILED after {time.perf_counter() - t0:.1f}s\n  {type(e).__name__}: {str(e)[:400]}\n  -> {explain(e)}")
+        msg = str(e)
+        print(f"FAILED after {time.perf_counter() - t0:.1f}s\n  {type(e).__name__}: {msg[:300]}")
+        details = re.findall(r"(quota_metric|quotaMetric|quota_id|quotaId|limit|model)['\"]?\s*[:=]\s*['\"]?([\w./-]+)", msg)
+        if details:  # the useful part of quota errors is usually past the first few hundred characters
+            print("  details: " + ", ".join(f"{k}={v}" for k, v in dict(details).items()))
+        print(f"  -> {explain(e)}")
+        if "limit" in msg and re.search(r"limit['\"]?\s*[:=]\s*['\"]?0\b", msg):
+            print("  -> limit is 0: this model has no free quota for your project. Try a 'flash-lite' model in .env.")
         return
     print(f"SUCCESS in {time.perf_counter() - t0:.1f}s - model replied: {r.text.strip()[:50]!r}")
 
