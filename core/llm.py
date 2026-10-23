@@ -36,6 +36,8 @@ except ImportError:  # python-dotenv not installed: environment variables still 
     pass
 
 PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
+RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))   # SDK retries on rate limits / server errors
+TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))     # seconds per request
 FAST_MODEL = os.getenv("FAST_MODEL", "")    # cheap model: classification, extraction, critique
 SMART_MODEL = os.getenv("SMART_MODEL", "")  # stronger model: planning, writing
 
@@ -159,21 +161,21 @@ def provider_from_env(name: str = PROVIDER) -> Provider:
     """Build the provider named by LLM_PROVIDER. SDKs are imported lazily so tests need no keys."""
     if name == "anthropic":
         import anthropic
-        return AnthropicProvider(anthropic.Anthropic(max_retries=4, timeout=90.0))
+        return AnthropicProvider(anthropic.Anthropic(max_retries=RETRIES, timeout=TIMEOUT))
     import openai
     if name == "azure":
         return OpenAICompatProvider(openai.AzureOpenAI(
             api_key=os.environ["AZURE_OPENAI_API_KEY"], azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-            api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21"), max_retries=4, timeout=90.0))
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21"), max_retries=RETRIES, timeout=TIMEOUT))
     if name == "gemini":
         return OpenAICompatProvider(openai.OpenAI(
             api_key=os.environ["GEMINI_API_KEY"],
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/", max_retries=4, timeout=90.0))
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/", max_retries=RETRIES, timeout=TIMEOUT))
     if name == "ollama":
         return OpenAICompatProvider(openai.OpenAI(
             api_key="ollama", base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"), timeout=300.0))
     if name == "openai":
-        return OpenAICompatProvider(openai.OpenAI(max_retries=4, timeout=90.0))
+        return OpenAICompatProvider(openai.OpenAI(max_retries=RETRIES, timeout=TIMEOUT))
     raise ValueError(f"unknown LLM_PROVIDER {name!r}")
 
 

@@ -32,8 +32,9 @@ Pricing and free tiers change; check the linked pages before you rely on them.
    - macOS: `cp .env.example .env` then `open -e .env`
 
    Paste the key after `GEMINI_API_KEY=` (no spaces) and save.
-5. Test it (the `.env` file is read automatically):
+5. Check the connection first, then run the matcher (the `.env` file is read automatically):
    ```bash
+   python -m core.check
    python -m copilot.matcher.run copilot/matcher/data/sample_postings
    ```
 
@@ -74,6 +75,11 @@ Sign up at **https://console.anthropic.com**, add credits under Billing, and cre
 `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY=...`.
 
 ---
+
+## If something seems stuck
+Run `python -m core.check`. It sends one tiny request and explains any error in plain words
+(rejected key, wrong model name, rate limit, no internet). On free tiers, use `--workers 1` with the matcher if you
+see rate-limit errors.
 
 ## Rules for keys
 - Keys live only in `.env`, which is in `.gitignore`. Check with `git status` that `.env` never appears.

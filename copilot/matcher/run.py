@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from concurrent.futures import ThreadPoolExecutor
+import os
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from copilot import db
@@ -23,8 +25,10 @@ from core.llm import LLM
 from core.tracing import Tracer
 
 
-def process_folder(folder: Path, con, llm: LLM, workers: int = 6) -> list[dict]:
+def process_folder(folder: Path, con, llm: LLM, workers: int | None = None) -> list[dict]:
     profile = load_profile()
+    # Free tiers allow only a few requests per minute, so default to 2 parallel calls (LLM_WORKERS to change).
+    workers = workers or int(os.getenv("LLM_WORKERS", "2"))
     known = {r[0] for r in con.execute("SELECT content_hash FROM postings")}
     todo, skipped = [], 0
     for f in sorted(folder.glob("*.txt")):
@@ -34,23 +38,30 @@ def process_folder(folder: Path, con, llm: LLM, workers: int = 6) -> list[dict]:
             skipped += 1
         else:
             todo.append((f, text, h))
+    print(f"{len(todo)} new postings to process ({skipped} already in the database), "
+          f"{workers} at a time...", flush=True)
 
     def work(item):
         f, text, h = item
+        t0 = time.perf_counter()
         try:
-            return f, h, extract(llm, text), None
+            return f, h, extract(llm, text), None, time.perf_counter() - t0
         except Exception as e:
-            return f, h, None, e
+            return f, h, None, e, time.perf_counter() - t0
 
+    done = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:   # extraction is I/O-bound: parallelise
-        results = list(pool.map(work, todo))
-    for f, h, job, err in results:                          # DB writes stay on one thread
-        if err:
-            print(f"  FAILED {f.name}: {err}")
-            continue
-        fit = score_posting(job, profile)
-        db.save_posting(con, h, f.name, job.model_dump(), fit.score, fit.as_dict())
-    print(f"new postings processed: {len(todo)} (skipped {skipped} already in the database)")
+        futures = [pool.submit(work, item) for item in todo]
+        for fut in as_completed(futures):                   # report and save each one as it finishes
+            f, h, job, err, secs = fut.result()
+            done += 1
+            if err:
+                print(f"  [{done}/{len(todo)}] FAILED {f.name} after {secs:.0f}s: {type(err).__name__}: {err}", flush=True)
+                continue
+            fit = score_posting(job, profile)
+            db.save_posting(con, h, f.name, job.model_dump(), fit.score, fit.as_dict())
+            print(f"  [{done}/{len(todo)}] {f.name}: {job.title} @ {job.company or '?'} "
+                  f"-> score {fit.score} ({secs:.0f}s)", flush=True)
     return rescore_all(con)
 
 
@@ -77,13 +88,14 @@ def main() -> None:
     ap.add_argument("folder", nargs="?", type=Path)
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--top", type=int, default=10)
+    ap.add_argument("--workers", type=int, default=None, help="parallel model calls (default 2, or LLM_WORKERS)")
     a = ap.parse_args()
     con = db.connect()
     profile = load_profile()
 
     if a.folder:
         llm = LLM(tracer=Tracer.for_run("matcher"), max_calls=500)
-        ranked = process_folder(a.folder, con, llm)
+        ranked = process_folder(a.folder, con, llm, a.workers)
         print(f"\nTop {a.top} matches:")
         for r in ranked[: a.top]:
             tag = f"EXCLUDED: {r['excluded']}" if r["excluded"] else \
