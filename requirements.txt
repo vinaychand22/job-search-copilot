@@ -1,0 +1,10 @@
+openai>=1.50          # OpenAI, Azure OpenAI, Gemini and Ollama all use this client
+anthropic>=0.69       # only needed if LLM_PROVIDER=anthropic
+langgraph>=1.0        # career coach workflow
+pydantic>=2.7
+streamlit>=1.45
+pandas>=2.0
+google-api-python-client>=2.100
+google-auth>=2.20
+google-auth-oauthlib>=1.1
+pytest>=8

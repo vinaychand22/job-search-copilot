@@ -1,0 +1,14 @@
+# secrets and personal data - never commit
+.env
+config/profile.toml
+config/credentials.json
+config/token.json
+data/
+inbox/postings/*.txt
+# generated
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+runs/
+.DS_Store
