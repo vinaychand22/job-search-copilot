@@ -15,6 +15,8 @@ SKILL_ALIASES = {
     "powerbi": "power bi", "ms power bi": "power bi", "ms excel": "excel", "advanced excel": "excel",
     "microsoft excel": "excel", "advanced sql": "sql", "ms sql": "sql", "pyspark": "spark",
     "a/b testing": "ab testing", "statistics": "statistical analysis",
+    "llm apis": "llm", "llm api": "llm", "openai api": "llm", "generative ai": "llm", "genai": "llm",
+    "prompting": "prompt engineering", "stats": "statistical analysis",
 }
 
 
