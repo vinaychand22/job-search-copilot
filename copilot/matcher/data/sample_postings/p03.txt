@@ -1,0 +1,3 @@
+AI Analyst (Remote, India)
+Lumen FinServ is hiring an AI Analyst to build LLM-powered reporting tools. 1+ years of experience.
+Requirements: Python, SQL, LLM APIs, prompt engineering. Bonus: LangChain, RAG. Salary 10-14 LPA.

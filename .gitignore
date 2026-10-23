@@ -3,7 +3,7 @@
 config/profile.toml
 config/credentials.json
 config/token.json
-data/
+/data/
 inbox/postings/*.txt
 # generated
 .venv/

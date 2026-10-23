@@ -1,0 +1,2 @@
+Analytics Engineer | Northstar Foods | Bengaluru (Hybrid, 3 days office)
+1-3 years. Build dbt models on Snowflake, write advanced SQL, version control with Git. Python is a plus.

@@ -1,0 +1,33 @@
+# Fixed profile used by the matcher eval. Do not edit when tuning your own profile.
+
+[candidate]
+name = "Your Name"
+years_experience = 2
+current_location = "Hyderabad"
+# Skills you can genuinely defend in an interview. Lowercase, canonical names.
+skills = ["sql", "python", "pandas", "snowflake", "excel", "powerpoint", "git", "llm",
+          "retrieval-augmented generation", "langchain", "postgresql", "docker", "data analysis",
+          "dashboarding", "price elasticity", "customer segmentation"]
+
+[targets]
+# A posting's title must contain one of these to score well.
+roles = ["data analyst", "analytics engineer", "business analyst", "ai analyst",
+         "decision scientist", "product analyst", "insights analyst"]
+locations = ["hyderabad", "bengaluru", "bangalore", "remote"]
+accept_remote = true
+min_salary_inr_per_year = 600000     # postings that state a lower salary are excluded
+max_years_required = 4               # postings asking for more are penalised
+
+[dealbreakers]
+# Any of these words in the title excludes the posting.
+title_words = ["sales", "telecaller", "intern", "night shift", "data entry"]
+
+[tracker]
+gmail_query = "newer_than:60d -category:promotions -category:social"
+follow_up_after_days = 14
+# Map your existing resume folders to tracker statuses (see copilot/folders.py).
+[tracker.folder_status]
+"not applied" = "saved"
+"applied" = "applied"
+"active" = "interview"
+"rejected" = "rejected"
