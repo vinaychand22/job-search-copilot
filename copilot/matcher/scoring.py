@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 
 from copilot.config import Profile
-from copilot.matcher.schema import JobPosting
+from copilot.matcher.schema import JobPosting, domains_match
 
 WEIGHTS = {"skills": 35, "role": 20, "experience": 15, "location": 15, "domain": 10, "nice_to_have": 5}
 
@@ -93,7 +93,7 @@ def score_posting(job: JobPosting, p: Profile) -> FitScore:
     nice_part = sum(_has_skill(s, p.skills) for s in nice) / len(nice) if nice else 0.5
 
     doms = job.domains
-    hits = [d for d in doms if any(d == m or d in m or m in d for m in p.domains)]
+    hits = [d for d in doms if any(domains_match(d, m) for m in p.domains)]
     # neutral when either side is unknown: no domains on the job, or none listed in your profile
     domain_part = (1.0 if hits else 0.0) if doms and p.domains else 0.5
     if hits:

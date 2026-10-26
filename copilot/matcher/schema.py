@@ -20,6 +20,35 @@ SKILL_ALIASES = {
 }
 
 
+# Industry names vary by portal and by model; map common variants to one name so that
+# "food & beverage", "consumer goods" and "CPG" all match a profile that says "fmcg".
+DOMAIN_ALIASES = {
+    "cpg": "fmcg", "consumer packaged goods": "fmcg", "consumer goods": "fmcg", "food": "fmcg",
+    "food and beverage": "fmcg", "food & beverage": "fmcg", "f&b": "fmcg", "beverages": "fmcg",
+    "fast moving consumer goods": "fmcg", "personal care": "fmcg",
+    "e-commerce": "ecommerce", "e commerce": "ecommerce", "online retail": "ecommerce",
+    "banking": "bfsi", "financial services": "bfsi", "fintech": "bfsi", "insurance": "bfsi", "finance": "bfsi",
+    "healthcare": "health", "pharma": "health", "pharmaceuticals": "health",
+    "pricing analytics": "pricing", "revenue management": "pricing", "promotional analytics": "promotions",
+    "loyalty programs": "loyalty", "loyalty data": "loyalty", "customer analytics": "consumer analytics",
+}
+
+
+def canonical_domain(d: str) -> str:
+    d = " ".join(d.strip().lower().split())
+    return DOMAIN_ALIASES.get(d, d)
+
+
+def domains_match(job_domain: str, profile_domain: str) -> bool:
+    """Same canonical domain, or one's words contained in the other's ('retail' ~ 'retail analytics').
+    Whole words only: 'ai' must not match 'retail'."""
+    a, b = canonical_domain(job_domain), canonical_domain(profile_domain)
+    if a == b:
+        return True
+    wa, wb = set(a.split()), set(b.split())
+    return bool(wa) and bool(wb) and (wa <= wb or wb <= wa)
+
+
 def canonical_skill(s: str) -> str:
     s = " ".join(s.strip().lower().split())
     return SKILL_ALIASES.get(s, s)
@@ -47,7 +76,7 @@ class JobPosting(BaseModel):
     @field_validator("domains")
     @classmethod
     def _normalise_domains(cls, v: list[str]) -> list[str]:
-        return list(dict.fromkeys(" ".join(d.lower().split()) for d in v if d.strip()))
+        return list(dict.fromkeys(canonical_domain(d) for d in v if d.strip()))
 
     @field_validator("required_skills", "nice_to_have_skills")
     @classmethod

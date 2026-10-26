@@ -5,6 +5,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from copilot.matcher.schema import canonical_domain
+
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = ROOT / "config"
 
@@ -46,7 +48,7 @@ def load_profile(path: str | Path | None = None) -> Profile:
         name=cand["name"],
         years_experience=float(cand["years_experience"]),
         skills=frozenset(s.lower() for s in cand["skills"]),
-        domains=frozenset(d.lower() for d in cand.get("domains", [])),
+        domains=frozenset(canonical_domain(d) for d in cand.get("domains", [])),
         target_roles=tuple(r.lower() for r in tgt["roles"]),
         locations=tuple(l.lower() for l in tgt["locations"]),
         accept_remote=bool(tgt.get("accept_remote", True)),

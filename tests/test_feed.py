@@ -146,3 +146,12 @@ def test_rate_limits_are_not_mistaken_for_schema_rejection():
 
     with pytest.raises(RateLimit):
         parse_alert(NAUKRI, LLM(FakeProvider([RateLimit("429")])))
+
+
+def test_domain_matching_whole_words_and_aliases():
+    from copilot.matcher.schema import canonical_domain, domains_match
+    assert not domains_match("ai", "retail")                 # the bug found in the first real run
+    assert domains_match("food & beverage", "fmcg") and domains_match("CPG", "fmcg")
+    assert domains_match("retail analytics", "retail")
+    assert not domains_match("fintech", "fmcg")
+    assert canonical_domain("Food & Beverage") == "fmcg"
