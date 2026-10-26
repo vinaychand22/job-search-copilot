@@ -9,6 +9,7 @@ you own, can tune, and can defend in an interview line by line.
 
 Weights (sum 100):  required skills 35 · role/title 20 · experience 15 · location 15 · domain 10 · nice-to-have 5
 Unknowns score neutral (0.5), not zero: a job-alert snippet that doesn't list skills shouldn't sink a job.
+Domain is a bonus only (match = 1.0, otherwise 0.5).
 Hard filters (score 0): dealbreaker title words, stated salary below your minimum.
 """
 from __future__ import annotations
@@ -94,8 +95,9 @@ def score_posting(job: JobPosting, p: Profile) -> FitScore:
 
     doms = job.domains
     hits = [d for d in doms if any(domains_match(d, m) for m in p.domains)]
-    # neutral when either side is unknown: no domains on the job, or none listed in your profile
-    domain_part = (1.0 if hits else 0.0) if doms and p.domains else 0.5
+    # Bonus only: a match adds points; no match or no information stays neutral. Industry tags on
+    # thin alert snippets are often the model's guess, and a guess must not be able to sink a job.
+    domain_part = 1.0 if hits else 0.5
     if hits:
         reasons.append(f"domain match: {', '.join(hits)}")
 
