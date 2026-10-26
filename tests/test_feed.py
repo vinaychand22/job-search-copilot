@@ -114,3 +114,32 @@ def test_decide_applied_starts_tracking_and_dismissed_stays_hidden():
     # re-seeing the same job later must not resurrect it
     db.save_posting(con, job_key(items[1]["title"], items[1]["company"]), "x", {"title": items[1]["title"]}, 99, {})
     assert items[1]["id"] not in {i["id"] for i in shortlist(con, PROFILE)}
+
+
+def test_provider_rejecting_tool_schema_falls_back_to_json_mode():
+    """The real Gemini failure: 400 INVALID_ARGUMENT on the nested tool schema."""
+    import json as _json
+    from tests.fakes import BadRequest, text
+    from core.structured import JSON_MODE
+    fp = FakeProvider([BadRequest("400 Request contains an invalid argument."),
+                       text("Here you go:\n```json\n" + _json.dumps(GOOD_NAUKRI) + "\n```"),
+                       text(_json.dumps({"jobs": [{"title": "AI Analyst", "company": "Lumen FinServ", "link": 3}]}))])
+    llm = LLM(fp)
+    first = parse_alert(NAUKRI, llm)
+    assert len(first) == 5 and "submit_alertjobs" in JSON_MODE
+    assert "tools" in fp.requests[0] and fp.requests[0]["tools"]            # tool mode tried once
+    assert not fp.requests[1]["tools"] and "JSON schema" in fp.requests[1]["messages"][0]["content"]
+    second = parse_alert(ALERTS[1], llm)                                     # remembered: straight to JSON
+    assert second[0][0].title == "AI Analyst" and not fp.requests[2]["tools"]
+    assert llm.usage.calls == 2                                              # the rejected call isn't counted
+
+
+def test_rate_limits_are_not_mistaken_for_schema_rejection():
+    import pytest
+    from tests.fakes import BadRequest
+
+    class RateLimit(Exception):
+        status_code = 429
+
+    with pytest.raises(RateLimit):
+        parse_alert(NAUKRI, LLM(FakeProvider([RateLimit("429")])))

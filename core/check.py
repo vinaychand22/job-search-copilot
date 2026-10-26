@@ -1,4 +1,4 @@
-"""Connection check: python -m core.check
+"""Connection check: python -m core.check   (add --structured to test the job-alert request shape)
 
 Sends one tiny request to the model configured in .env and explains any error in plain words.
 Run this first whenever something AI-related seems stuck.
@@ -30,7 +30,29 @@ def explain(err: Exception) -> str:
     return "Unexpected error - send this message (without your key) for help."
 
 
+def check_structured() -> None:
+    """Second check: one nested structured request (a list of jobs), the shape the job-alert reader uses."""
+    from copilot.feed.alerts import AlertJobs
+    from core.structured import JSON_MODE, structured
+    print("sending one structured test request (list of jobs)...", flush=True)
+    t0 = time.perf_counter()
+    try:
+        llm = LLM(max_calls=3)
+        out = structured(llm, model=FAST_MODEL, schema=AlertJobs, tag="check",
+                         system="You list the jobs in a job-alert email.",
+                         user="Jobs for you: 1) Data Analyst at Acme, Hyderabad, 2-4 Yrs. 2) BI Analyst at Zeta, Remote.")
+    except Exception as e:
+        print(f"FAILED after {time.perf_counter() - t0:.1f}s\n  {type(e).__name__}: {str(e)[:300]}\n  -> {explain(e)}")
+        return
+    mode = "JSON mode (provider rejected tool schema; fallback worked)" if JSON_MODE else "tool mode"
+    print(f"SUCCESS in {time.perf_counter() - t0:.1f}s via {mode}: {[j.title for j in out.jobs]}")
+
+
 def main() -> None:
+    import sys
+    if "--structured" in sys.argv:
+        check_structured()
+        return
     key_var = KEY_VARS.get(PROVIDER)
     print(f"provider   : {PROVIDER}")
     print(f"fast model : {FAST_MODEL or '(missing - set FAST_MODEL in .env)'}")

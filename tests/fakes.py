@@ -30,7 +30,15 @@ class FakeProvider:
             self.requests.append(kwargs)
             if not self._responses:
                 raise AssertionError("FakeProvider ran out of scripted responses")
-            return self._responses.pop(0)
+            r = self._responses.pop(0)
+        if isinstance(r, Exception):   # script a provider error, e.g. a 400 rejection
+            raise r
+        return r
+
+
+class BadRequest(Exception):
+    """Mimics openai.BadRequestError (HTTP 400)."""
+    status_code = 400
 
 
 # Backwards-compatible name used across the tests
