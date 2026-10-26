@@ -20,7 +20,7 @@ def test_daily_demo_end_to_end(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "alerts 2 -> 6 jobs (6 new)" in out                 # one request per alert, not per job
     assert "AI Analyst" in out and "Data Analyst" in out        # shortlist printed
-    assert "linkedin.com/comm/jobs/view/4110003" in out         # with the real apply link
+    assert "apply links" in out                                   # pointer to links
     assert "budget (2) used up" in out                          # stops cleanly, rest waits
     assert (tmp_path / "shortlist.md").exists() and (tmp_path / "runs.csv").exists()
     assert (tmp_path / "demo-daily.db").exists() and not (tmp_path / "copilot.db").exists()  # real DB untouched

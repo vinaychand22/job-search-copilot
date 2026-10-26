@@ -101,9 +101,10 @@ def main() -> None:
 
     print(f"\n=== Shortlist ({len(items)} jobs scoring {profile.min_score:g}+) ===")
     for j in items[:10]:
-        print(f"  {j['score']:5.1f}  {j['title']} @ {j['company']} [{j['portal']}]")
-        if j["url"]:
-            print(f"         {j['url']}")
+        extra = f" - missing: {j['missing']}" if j["missing"] else ""
+        print(f"  {j['score']:5.1f}  {j['title']} @ {j['company']} [{j['portal']}]{extra}")
+    if items:
+        print("  (apply links: dashboard 'Today's shortlist' tab, or data/shortlist.md)")
     acts = action_items(con, profile.follow_up_after_days)
     print(f"\nDeadlines coming up: {len(acts['deadlines'])} | follow-ups due: {len(acts['follow_ups'])}")
     print("Open the dashboard to apply / dismiss:  python -m streamlit run app.py")

@@ -94,6 +94,30 @@ def work_mode_from(location: str | None) -> str:
     return "unknown"
 
 
+_URL_YEARS = re.compile(r"-(\d{1,2})-to-(\d{1,2})-years?-", re.I)
+_URL_CITIES = ("hyderabad", "bengaluru", "bangalore", "chennai", "pune", "mumbai", "gurgaon", "gurugram",
+               "noida", "delhi", "kolkata", "ahmedabad", "kochi", "remote")
+
+
+def enrich_from_url(job: JobPosting, url: str | None) -> JobPosting:
+    """Fill gaps from the job link. Naukri links spell out experience and city
+    ('...-bengaluru-0-to-5-years-231026502344'), even when the alert email text doesn't.
+    Pure code, no model call; only fills fields that are still empty."""
+    if not url:
+        return job
+    slug = url.split("?")[0].lower()
+    update: dict = {}
+    if job.min_years_experience is None and (m := _URL_YEARS.search(slug)):
+        update["min_years_experience"] = int(m.group(1))
+    if not job.location:
+        cities = [c for c in _URL_CITIES if f"-{c}-" in slug]
+        if cities:
+            update["location"] = ", ".join(c.title() for c in cities)
+            if "remote" in cities:
+                update["work_mode"] = "remote"
+    return job.model_copy(update=update) if update else job
+
+
 def job_key(title: str, company: str | None) -> str:
     norm = lambda s: " ".join(re.sub(r"[^a-z0-9 ]", " ", (s or "").lower()).split())
     return hashlib.sha256(f"alert|{norm(title)}|{db.company_key(company or '')}".encode()).hexdigest()
@@ -145,7 +169,7 @@ def ingest_alert(con: sqlite3.Connection, e: Email, llm: LLM, profile: Profile) 
     new = 0
     for j, url in jobs:
         try:
-            posting = to_posting(j)
+            posting = enrich_from_url(to_posting(j), url)
         except Exception as ex:  # one malformed job must not drop the rest of the alert
             llm.tracer.log("alert_job_invalid", title=j.title, error=str(ex)[:200])
             continue

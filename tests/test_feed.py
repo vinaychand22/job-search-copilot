@@ -155,3 +155,14 @@ def test_domain_matching_whole_words_and_aliases():
     assert domains_match("retail analytics", "retail")
     assert not domains_match("fintech", "fmcg")
     assert canonical_domain("Food & Beverage") == "fmcg"
+
+
+def test_experience_and_city_read_from_naukri_link():
+    from copilot.feed.alerts import enrich_from_url
+    url = ("https://www.naukri.com/jd/job-listings-data-analyst-birlasoft-india-limited-bengaluru-"
+           "0-to-5-years-231026502344?xp=1&src=ja20261026119")
+    p = enrich_from_url(to_posting(AlertJob(title="Data Analyst", company="Birlasoft")), url)
+    assert (p.min_years_experience, p.location) == (0, "Bengaluru")
+    kept = enrich_from_url(to_posting(AlertJob(title="BI Analyst", location="Pune", experience="3-5 Yrs")), url)
+    assert (kept.min_years_experience, kept.location) == (3, "Pune")      # never overwrites real data
+    assert enrich_from_url(p, None) is p

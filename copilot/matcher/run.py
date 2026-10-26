@@ -69,8 +69,9 @@ def rescore_all(con) -> list[dict]:
     """Scores are cheap code, so re-score everything whenever the profile changes - no new tokens."""
     profile = load_profile()
     out = []
-    for r in con.execute("SELECT id, data_json FROM postings"):
-        job = JobPosting.model_validate_json(r["data_json"])
+    from copilot.feed.alerts import enrich_from_url
+    for r in con.execute("SELECT id, data_json, url FROM postings"):
+        job = enrich_from_url(JobPosting.model_validate_json(r["data_json"]), r["url"])
         fit = score_posting(job, profile)
         con.execute("UPDATE postings SET score = ?, reasons_json = ? WHERE id = ?",
                     (fit.score, json.dumps(fit.as_dict()), r["id"]))
