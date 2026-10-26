@@ -68,6 +68,9 @@ def test_to_posting_and_domain_scoring():
     from copilot.matcher.scoring import score_posting
     assert score_posting(with_domain, PROFILE).score > score_posting(p, PROFILE).score
     assert "domain match" in "; ".join(score_posting(with_domain, PROFILE).reasons)
+    from dataclasses import replace
+    no_domains = replace(PROFILE, domains=frozenset())          # profile without a domains line
+    assert score_posting(with_domain, no_domains).score == score_posting(p, no_domains).score
 
 
 def test_sync_turns_alert_into_jobs_and_dedupes_across_portals():

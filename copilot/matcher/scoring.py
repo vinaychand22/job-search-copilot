@@ -94,7 +94,8 @@ def score_posting(job: JobPosting, p: Profile) -> FitScore:
 
     doms = job.domains
     hits = [d for d in doms if any(d == m or d in m or m in d for m in p.domains)]
-    domain_part = (1.0 if hits else 0.0) if doms else 0.5
+    # neutral when either side is unknown: no domains on the job, or none listed in your profile
+    domain_part = (1.0 if hits else 0.0) if doms and p.domains else 0.5
     if hits:
         reasons.append(f"domain match: {', '.join(hits)}")
 
