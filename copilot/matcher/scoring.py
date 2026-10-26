@@ -12,6 +12,7 @@ Hard filters (score 0): dealbreaker title words, stated salary below your minimu
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from copilot.config import Profile
@@ -47,7 +48,8 @@ def annual_inr(job: JobPosting) -> int | None:
 def score_posting(job: JobPosting, p: Profile) -> FitScore:
     title = job.title.lower()
     for w in p.dealbreaker_words:
-        if w in title:
+        # whole words only: "intern" must not exclude "Internal Audit" or "International Business Analyst"
+        if re.search(rf"\b{re.escape(w)}\b", title):
             return FitScore(0.0, excluded=f"dealbreaker word in title: '{w}'")
     pay = annual_inr(job)
     if pay is not None and pay < p.min_salary_inr:
