@@ -140,3 +140,35 @@ def test_anthropic_adapter_groups_tool_results_and_caches_system():
     assert seen["system"][0]["cache_control"] == {"type": "ephemeral"}
     results = seen["messages"][2]["content"]
     assert [b["tool_use_id"] for b in results] == ["t1", "t2"] and results[1]["is_error"]
+
+
+def test_inline_refs_removes_references_for_gemini():
+    import json
+    from core.llm import inline_refs
+    from copilot.coach.schemas import WeeklyPlan
+    from copilot.feed.alerts import AlertJobs
+    for model in (AlertJobs, WeeklyPlan):
+        flat = inline_refs(model.model_json_schema())
+        text = json.dumps(flat)
+        assert "$ref" not in text and "$defs" not in text
+    item = inline_refs(AlertJobs.model_json_schema())["properties"]["jobs"]["items"]
+    assert item["type"] == "object" and "title" in item["properties"] and "link" in item["properties"]
+
+
+def test_openai_adapter_sends_inlined_schema():
+    from types import SimpleNamespace
+    from copilot.feed.alerts import AlertJobs
+    seen = {}
+
+    def create(**kw):
+        seen.update(kw)
+        msg = SimpleNamespace(content="{}", tool_calls=None)
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason="stop")],
+                               usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1))
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    tool_def = {"name": "submit_alertjobs", "description": "d", "input_schema": AlertJobs.model_json_schema()}
+    OpenAICompatProvider(client).complete(model="m", system="s", messages=[{"role": "user", "content": "x"}],
+                                          tools=[tool_def], force_tool="submit_alertjobs", max_tokens=10,
+                                          temperature=None)
+    assert "$ref" not in json.dumps(seen["tools"])

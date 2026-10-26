@@ -11,7 +11,7 @@ _real_connect = db.connect
 
 def test_daily_demo_end_to_end(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(daily, "DATA", tmp_path)
-    monkeypatch.setattr(daily.db, "connect", lambda: _real_connect(tmp_path / "copilot.db"))
+    monkeypatch.setattr(daily.db, "connect", lambda path=None: _real_connect(path or tmp_path / "copilot.db"))
     li = {"jobs": [{"title": "AI Analyst", "company": "Lumen FinServ", "location": "India (Remote)", "link": 3}]}
     fake = FakeProvider([tool("submit_alertjobs", GOOD_NAUKRI), tool("submit_alertjobs", li)])
     monkeypatch.setattr("core.llm.provider_from_env", lambda name=None: fake)
@@ -23,3 +23,4 @@ def test_daily_demo_end_to_end(tmp_path, monkeypatch, capsys):
     assert "linkedin.com/comm/jobs/view/4110003" in out         # with the real apply link
     assert "budget (2) used up" in out                          # stops cleanly, rest waits
     assert (tmp_path / "shortlist.md").exists() and (tmp_path / "runs.csv").exists()
+    assert (tmp_path / "demo-daily.db").exists() and not (tmp_path / "copilot.db").exists()  # real DB untouched

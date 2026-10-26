@@ -60,7 +60,8 @@ def main() -> None:
                          "then check the connection with: python -m core.check")
     t0 = time.perf_counter()
     profile = load_profile()
-    con = db.connect()
+    # Demo data goes to its own database so sample emails never mix with your real applications.
+    con = db.connect(DATA / "demo-daily.db") if a.demo else db.connect()
     llm = LLM(max_calls=a.budget, tracer=Tracer.for_run("daily"))
     totals = {"processed": 0, "alerts": 0, "jobs_found": 0, "new_jobs": 0, "status_changes": 0, "errors": 0}
     stopped = False

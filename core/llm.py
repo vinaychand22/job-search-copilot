@@ -67,6 +67,34 @@ class Provider(Protocol):
                  force_tool: str | None, max_tokens: int, temperature: float | None) -> LLMResponse: ...
 
 
+# ---------------------------------------------------------------- schema portability
+
+def inline_refs(schema: dict[str, Any]) -> dict[str, Any]:
+    """Replace every {"$ref": "#/$defs/X"} with the definition itself and drop "$defs".
+
+    Pydantic writes nested models (a list of jobs, each a model) as references. OpenAI and
+    Claude accept that; Gemini's OpenAI-compatible endpoint rejects it with 400 INVALID_ARGUMENT.
+    A fully inlined schema means the same thing and works everywhere.
+    """
+    defs = schema.get("$defs", {})
+
+    def walk(node: Any, depth: int = 0) -> Any:
+        if depth > 20:  # guard against self-referencing models
+            raise ValueError("schema nesting too deep to inline")
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                target = walk(defs[ref.split("/")[-1]], depth + 1)
+                extra = {k: walk(v, depth + 1) for k, v in node.items() if k != "$ref"}
+                return {**target, **extra}
+            return {k: walk(v, depth + 1) for k, v in node.items() if k != "$defs"}
+        if isinstance(node, list):
+            return [walk(v, depth + 1) for v in node]
+        return node
+
+    return walk(schema)
+
+
 # ---------------------------------------------------------------- OpenAI-compatible (OpenAI, Azure, Gemini, Ollama)
 
 class OpenAICompatProvider:
@@ -94,7 +122,8 @@ class OpenAICompatProvider:
                                   "max_completion_tokens": max_tokens}
         if tools:
             kwargs["tools"] = [{"type": "function", "function": {
-                "name": t["name"], "description": t["description"], "parameters": t["input_schema"]}} for t in tools]
+                "name": t["name"], "description": t["description"],
+                "parameters": inline_refs(t["input_schema"])}} for t in tools]
             # "required" = must call a tool; with one tool offered that forces it, and it is the
             # most widely supported form across OpenAI-compatible servers.
             kwargs["tool_choice"] = "required" if force_tool else "auto"
