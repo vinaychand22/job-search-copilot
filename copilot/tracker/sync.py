@@ -69,7 +69,7 @@ def sync(con: sqlite3.Connection, emails: Iterable[Email], llm: LLM,
             rep.budget_stopped = True
             break
         except Exception as ex:  # one bad email must not stop the sync; it is retried next run
-            rep.errors.append(f"{e.subject[:60]}: {type(ex).__name__}: {ex}")
+            rep.errors.append(f"{e.subject[:60]}: {type(ex).__name__}: {str(ex)[:160]}")
             continue
         app_id = None
         status = CATEGORY_STATUS[tri.category]

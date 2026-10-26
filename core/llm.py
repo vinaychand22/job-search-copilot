@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -36,6 +37,8 @@ except ImportError:  # python-dotenv not installed: environment variables still 
     pass
 
 PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
+# Client-side pacing: Gemini's free tier allows ~15 requests/minute per model, so default to 14.
+RPM = float(os.getenv("LLM_RPM", "14" if PROVIDER == "gemini" else "0"))
 RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))   # SDK retries on rate limits / server errors
 TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))     # seconds per request
 FAST_MODEL = os.getenv("FAST_MODEL", "")    # cheap model: classification, extraction, critique
@@ -44,6 +47,25 @@ SMART_MODEL = os.getenv("SMART_MODEL", "")  # stronger model: planning, writing
 
 class BudgetExceeded(RuntimeError):
     """Raised before a call that would break the run's call/token budget."""
+
+
+class QuotaExhausted(BudgetExceeded):
+    """The provider's daily quota is used up. Subclass of BudgetExceeded so pipelines stop
+    cleanly (and resume next run) instead of failing every remaining item."""
+
+
+_RETRY_IN = re.compile(r"retry in ([\d.]+)s|retryDelay['\"]?:\s*['\"]?(\d+)s", re.I)
+
+
+def _rate_limit_wait(e: Exception) -> float | None:
+    """Seconds to wait for a per-minute rate limit (429); None if it isn't one, or if it is daily."""
+    if getattr(e, "status_code", None) != 429 and "429" not in str(e)[:40]:
+        return None
+    msg = str(e)
+    if "PerDay" in msg:
+        raise QuotaExhausted("daily model quota used up - remaining items wait for the next run") from e
+    m = _RETRY_IN.search(msg)
+    return min(float(next(g for g in m.groups() if g)) + 1, 90) if m else 20.0
 
 
 @dataclass(frozen=True)
@@ -231,6 +253,8 @@ class LLM:
         self.usage = Usage()
         self.tracer = tracer or Tracer.disabled()
         self._lock = threading.Lock()  # agents fan out across threads
+        self._min_interval = 60.0 / RPM if RPM > 0 else 0.0
+        self._next_slot = 0.0
 
     def chat(self, *, model: str, system: str, messages: list[dict], tools: list[dict] | None = None,
              force_tool: str | None = None, max_tokens: int = 1024, temperature: float | None = None,
@@ -242,9 +266,21 @@ class LLM:
                 raise BudgetExceeded(f"call budget of {self.max_calls} reached")
             if self.usage.output_tokens + max_tokens > self.max_output_tokens_total:
                 raise BudgetExceeded("output-token budget reached")
-        t0 = time.perf_counter()
-        r = self.provider.complete(model=model, system=system, messages=messages, tools=tools,
-                                   force_tool=force_tool, max_tokens=max_tokens, temperature=temperature)
+        r = None
+        for attempt in range(4):  # rate-limit retries: wait as long as the provider asks, then try again
+            self._pace()
+            t0 = time.perf_counter()
+            try:
+                r = self.provider.complete(model=model, system=system, messages=messages, tools=tools,
+                                           force_tool=force_tool, max_tokens=max_tokens, temperature=temperature)
+                break
+            except Exception as e:
+                wait = _rate_limit_wait(e)   # raises QuotaExhausted for daily limits
+                if wait is None or attempt == 3:
+                    raise
+                self.tracer.log("rate_limited", wait_s=wait, attempt=attempt)
+                print(f"  (rate limit: waiting {wait:.0f}s as the provider asked)", flush=True)
+                time.sleep(wait)
         dt = time.perf_counter() - t0
         with self._lock:
             self.usage.calls += 1
@@ -255,3 +291,14 @@ class LLM:
                         input_tokens=r.input_tokens, output_tokens=r.output_tokens,
                         tools_called=[c.name for c in r.tool_calls])
         return r
+
+    def _pace(self) -> None:
+        """Space calls out to stay under the provider's requests-per-minute limit."""
+        if not self._min_interval:
+            return
+        with self._lock:
+            now = time.monotonic()
+            start = max(now, self._next_slot)
+            self._next_slot = start + self._min_interval
+        if start > now:
+            time.sleep(start - now)

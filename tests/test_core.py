@@ -172,3 +172,37 @@ def test_openai_adapter_sends_inlined_schema():
                                           tools=[tool_def], force_tool="submit_alertjobs", max_tokens=10,
                                           temperature=None)
     assert "$ref" not in json.dumps(seen["tools"])
+
+
+def test_rate_limit_waits_then_retries(monkeypatch):
+    import core.llm as llm_mod
+
+    class RL(Exception):
+        status_code = 429
+
+    slept = []
+    monkeypatch.setattr(llm_mod.time, "sleep", lambda s: slept.append(s))
+    fp = FakeProvider([RL("429 ... Please retry in 3.2s ... PerMinute"), text("ok")])
+    assert chat(LLM(fp)).text == "ok" and slept == [4.2]
+
+
+def test_daily_quota_stops_run_cleanly():
+    import pytest
+    from core.llm import QuotaExhausted
+
+    class RL(Exception):
+        status_code = 429
+
+    with pytest.raises(QuotaExhausted):
+        chat(LLM(FakeProvider([RL("429 quotaId GenerateRequestsPerDayPerProjectPerModel-FreeTier")])))
+
+
+def test_pacing_spaces_calls(monkeypatch):
+    import core.llm as llm_mod
+    slept = []
+    monkeypatch.setattr(llm_mod.time, "sleep", lambda s: slept.append(s))
+    llm = LLM(FakeProvider([text("a"), text("b")]))
+    llm._min_interval = 4.0
+    chat(llm)
+    chat(llm)
+    assert slept and 3.0 < slept[0] <= 4.0

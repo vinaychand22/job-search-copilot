@@ -141,11 +141,13 @@ def test_rate_limits_are_not_mistaken_for_schema_rejection():
     import pytest
     from tests.fakes import BadRequest
 
+    from core.llm import QuotaExhausted
+
     class RateLimit(Exception):
         status_code = 429
 
-    with pytest.raises(RateLimit):
-        parse_alert(NAUKRI, LLM(FakeProvider([RateLimit("429")])))
+    with pytest.raises(QuotaExhausted):   # daily quota: stop, never switch to JSON mode
+        parse_alert(NAUKRI, LLM(FakeProvider([RateLimit("429 GenerateRequestsPerDayPerProjectPerModel")])))
 
 
 def test_domain_matching_whole_words_and_aliases():

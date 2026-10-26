@@ -189,3 +189,13 @@ def test_impact_report_medians(tmp_path):
         log("tracking", m, "copilot", path=p)
     r = report(p)[0]
     assert (r["manual_median"], r["copilot_median"], r["reduction_pct"]) == (25.0, 4.5, 82.0)
+
+
+def test_portal_marketing_is_skipped_without_model():
+    for subj, sender in [("Your Naukri Privilege Report is ready - Insights you can act", "Naukri <info@naukri.com>"),
+                         ("Rate  Quantium Analytics anonymously. Your opinion matters!", "AmbitionBox <x@ambitionbox.com>"),
+                         ("Privilege Service - CallBack Later CRM:0822782", "Naukri <ff@naukri.com>"),
+                         ("Your resume might be saying the wrong thing", "Naukri <info@naukri.com>"),
+                         ("[Invite] Ready to Take Your SDE Career Global? 🌍", "x@events.com")]:
+        assert rule_classify(email("p", subj, sender=sender)).category == "other", subj
+    assert rule_classify(email("i", "Interview invite: Data Analyst at Acme")) is None   # real invites still go to the model

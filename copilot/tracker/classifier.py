@@ -39,6 +39,14 @@ ALERT_SUBJECT = re.compile(
 # rules only match addresses that are alert-only. The eval caught this exact mistake.
 ALERT_SENDER = re.compile(r"(jobalert|job-alert|alerts?@|naukrialerts|recommendations?@)", re.I)
 ACCOUNT_NOTICE = re.compile(r"\b(otp|one[- ]time password|verify your email|password reset)\b", re.I)
+# Portal marketing and paid-service mail: never a job or an application update, so no model call.
+# (Found in the first real Gmail run: these used 6 of 18 requests.)
+PROMO_SUBJECT = re.compile(
+    r"privilege|report is ready|webinar|masterclass|\bcourse\b|certification|upskill|discount|% ?off|"
+    r"offer ends|resume (might|score|review|writing)|rate .{0,40}anonymously|your opinion matters|"
+    r"fast forward|call ?back later|\bcrm[:\s]|\[invite\]|career global|who viewed|profile views|"
+    r"boost your profile|premium|subscription|renew", re.I)
+PROMO_SENDER = re.compile(r"ambitionbox|naukrilearning|upgrad|simplilearn|coursera|udemy", re.I)
 NEWSLETTER = re.compile(r"(newsletter|digest|noreply@medium\.com|substack)", re.I)
 
 
@@ -91,6 +99,8 @@ def rule_classify(e: Email) -> EmailTriage | None:
                            summary=f"Job alert: {e.subject[:150]}")
     if ACCOUNT_NOTICE.search(e.subject):
         return EmailTriage(category="other", action_required=False, summary=f"Account notice: {e.subject[:150]}")
+    if PROMO_SUBJECT.search(e.subject) or PROMO_SENDER.search(e.sender):
+        return EmailTriage(category="other", action_required=False, summary=f"Promotion: {e.subject[:150]}")
     if NEWSLETTER.search(e.sender):
         return EmailTriage(category="other", action_required=False, summary=f"Newsletter: {e.subject[:150]}")
     return None
