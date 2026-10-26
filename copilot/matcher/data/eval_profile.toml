@@ -8,22 +8,27 @@ current_location = "Hyderabad"
 skills = ["sql", "python", "pandas", "snowflake", "excel", "powerpoint", "git", "llm",
           "retrieval-augmented generation", "langchain", "postgresql", "docker", "data analysis",
           "dashboarding", "price elasticity", "customer segmentation"]
+# Industries / business areas you have real experience in (matched against job domains).
+domains = ["fmcg", "cpg", "retail", "consumer analytics", "pricing", "promotions", "loyalty"]
 
 [targets]
 # A posting's title must contain one of these to score well.
 roles = ["data analyst", "analytics engineer", "business analyst", "ai analyst",
-         "decision scientist", "product analyst", "insights analyst"]
+         "decision scientist", "product analyst", "insights analyst", "commercial analyst"]
 locations = ["hyderabad", "bengaluru", "bangalore", "remote"]
 accept_remote = true
 min_salary_inr_per_year = 600000     # postings that state a lower salary are excluded
 max_years_required = 4               # postings asking for more are penalised
+min_score = 60                       # shortlist only shows jobs scoring at least this
 
 [dealbreakers]
 # Any of these words in the title excludes the posting.
-title_words = ["sales", "telecaller", "intern", "night shift", "data entry"]
+title_words = ["field sales", "telecaller", "intern", "night shift", "data entry"]
 
 [tracker]
-gmail_query = "newer_than:60d -category:promotions -category:social"
+# Application updates (replies from companies). Job alerts use alerts_query (defaults to
+# Naukri, LinkedIn, Instahyre, Cutshort, Hirist, Foundit and Indeed alert senders).
+gmail_query = "newer_than:30d -category:promotions -category:social"
 follow_up_after_days = 14
 # Map your existing resume folders to tracker statuses (see copilot/folders.py).
 [tracker.folder_status]

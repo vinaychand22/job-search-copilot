@@ -80,9 +80,26 @@ CREATE TABLE IF NOT EXISTS postings (
     source TEXT, title TEXT, company TEXT,
     data_json TEXT NOT NULL, score REAL, reasons_json TEXT,
     status TEXT NOT NULL DEFAULT 'new',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    url TEXT, portal TEXT, origin TEXT NOT NULL DEFAULT 'manual', received_at TEXT
 );
 """
+
+# Columns added after the first release. connect() adds any that an older database lacks,
+# so `git pull` never breaks an existing copilot.db.
+MIGRATIONS = {
+    "postings": {"url": "TEXT", "portal": "TEXT", "origin": "TEXT NOT NULL DEFAULT 'manual'",
+                 "received_at": "TEXT"},
+}
+
+
+def _migrate(con: sqlite3.Connection) -> None:
+    for table, cols in MIGRATIONS.items():
+        have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+        for col, decl in cols.items():
+            if col not in have:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    con.commit()
 
 _SUFFIXES = re.compile(
     r"\b(private|pvt|ltd|limited|llp|inc|corp|corporation|technologies|technology|tech|solutions|"
@@ -104,6 +121,7 @@ def connect(path: str | Path = DEFAULT_DB) -> sqlite3.Connection:
     con = sqlite3.connect(path)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
+    _migrate(con)
     return con
 
 
@@ -188,11 +206,17 @@ def should_advance(current: str, new: str) -> bool:
 
 
 def save_posting(con: sqlite3.Connection, content_hash: str, source: str, data: dict[str, Any],
-                 score: float, reasons: dict[str, Any]) -> None:
+                 score: float, reasons: dict[str, Any], *, url: str | None = None,
+                 portal: str | None = None, origin: str = "manual", received_at: str | None = None) -> bool:
+    """Insert a posting, or refresh its score if already known. Returns True if it was new.
+    An existing posting keeps its status, so a job you dismissed never comes back as 'new'."""
+    existed = con.execute("SELECT 1 FROM postings WHERE content_hash = ?", (content_hash,)).fetchone()
     con.execute(
-        "INSERT INTO postings (content_hash, source, title, company, data_json, score, reasons_json, created_at)"
-        " VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(content_hash) DO UPDATE SET score = excluded.score,"
-        " reasons_json = excluded.reasons_json",
+        "INSERT INTO postings (content_hash, source, title, company, data_json, score, reasons_json, created_at,"
+        " url, portal, origin, received_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+        " ON CONFLICT(content_hash) DO UPDATE SET score = excluded.score, reasons_json = excluded.reasons_json,"
+        " url = COALESCE(postings.url, excluded.url), portal = COALESCE(postings.portal, excluded.portal)",
         (content_hash, source, data.get("title"), data.get("company"), json.dumps(data), score,
-         json.dumps(reasons), now()))
+         json.dumps(reasons), now(), url, portal, origin, received_at or now()))
     con.commit()
+    return existed is None

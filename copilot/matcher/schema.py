@@ -41,6 +41,13 @@ class JobPosting(BaseModel):
     required_skills: list[str] = Field(default_factory=list, max_length=25)
     nice_to_have_skills: list[str] = Field(default_factory=list, max_length=25)
     visa_sponsorship: bool | None = None
+    domains: list[str] = Field(default_factory=list, max_length=8,
+                               description="Industries/business areas, lowercase: e.g. fmcg, retail, pricing, banking")
+
+    @field_validator("domains")
+    @classmethod
+    def _normalise_domains(cls, v: list[str]) -> list[str]:
+        return list(dict.fromkeys(" ".join(d.lower().split()) for d in v if d.strip()))
 
     @field_validator("required_skills", "nice_to_have_skills")
     @classmethod

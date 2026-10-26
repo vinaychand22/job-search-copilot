@@ -1,16 +1,23 @@
-"""Job Search Copilot dashboard.   Run:  streamlit run app.py
+"""Job Search Copilot dashboard.   Run:  python -m streamlit run app.py
 
 Reads the same SQLite file the agents write to. Nothing here calls an LLM, so the
 dashboard is instant and free to open as often as you like.
+
+COPILOT_DEMO=1 serves sample data from a temporary database: that is how the public
+demo is deployed without exposing anyone's real emails or applications.
 """
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
 from copilot import db
+from copilot.feed.shortlist import decide, shortlist
 from copilot.analytics import funnel, status_counts
 from copilot.config import load_profile
 from copilot.impact import report as impact_report
@@ -19,15 +26,51 @@ from copilot.matcher.run import load_jobs
 from copilot.tracker.sync import action_items
 
 st.set_page_config(page_title="Job Search Copilot", layout="wide")
+DEMO = os.getenv("COPILOT_DEMO") == "1"
+
+
+@st.cache_resource
+def demo_db() -> Path:
+    from copilot import demo
+    return demo.build(Path(tempfile.gettempdir()) / "copilot-demo.db")
+
+
 profile = load_profile()
-con = db.connect()
+con = db.connect(demo_db() if DEMO else db.DEFAULT_DB)
 
 st.title("Job Search Copilot")
-st.caption(f"Profile: {profile.name} · data: {db.DEFAULT_DB.name} · "
-           "update with `python -m copilot.tracker.run` and `python -m copilot.matcher.run inbox/postings`")
+if DEMO:
+    st.info("Demo with sample data. The real copilot runs on the owner's laptop and reads their Gmail job "
+            "alerts and recruiter emails every morning. Source: github.com/vinaychand22/job-search-copilot")
+st.caption(f"Profile: {profile.name} · refresh with `python -m copilot.daily`")
 
-overview, apps_tab, actions_tab, coach_tab, matches_tab, skills_tab, impact_tab = st.tabs(
-    ["Overview", "Applications", "Action items", "Coach plan", "Job matches", "Skill demand", "Impact"])
+(shortlist_tab, overview, apps_tab, actions_tab, coach_tab, matches_tab, skills_tab,
+ impact_tab) = st.tabs(["Today's shortlist", "Overview", "Applications", "Action items", "Coach plan",
+                        "All jobs", "Skill demand", "Impact"])
+
+with shortlist_tab:
+    days = st.radio("Jobs received in the last", [1, 3, 7, 30], index=2, horizontal=True,
+                    format_func=lambda d: f"{d} day{'s' if d > 1 else ''}")
+    items = shortlist(con, profile, days=days, limit=50)
+    st.caption(f"{len(items)} new jobs scoring {profile.min_score:g}+ (change min_score in your profile). "
+               "Applied jobs move to Applications; dismissed jobs never come back.")
+    if not items:
+        st.info("Nothing new. The daily run adds jobs from your Naukri / LinkedIn alert emails.")
+    for j in items:
+        with st.container(border=True):
+            left, right = st.columns([5, 2])
+            left.markdown(f"**{j['score']:.0f}** · **{j['title']}** · {j['company']}  \n"
+                          f"{j['portal']} · received {j['received']}")
+            left.caption(j["why"] + (f" · missing: {j['missing']}" if j["missing"] else ""))
+            if j["url"]:
+                right.link_button("Open & apply ↗", j["url"], width="stretch")
+            b1, b2 = right.columns(2)
+            if b1.button("Applied", key=f"ap{j['id']}", width="stretch"):
+                decide(con, j["id"], "applied")
+                st.rerun()
+            if b2.button("Not for me", key=f"no{j['id']}", width="stretch"):
+                decide(con, j["id"], "dismissed")
+                st.rerun()
 
 with overview:
     counts = status_counts(con)
@@ -98,7 +141,8 @@ with coach_tab:
         st.caption(p["rationale"])
 
 with matches_tab:
-    rows = con.execute("SELECT title, company, score, reasons_json, status FROM postings ORDER BY score DESC").fetchall()
+    rows = con.execute("SELECT title, company, portal, score, reasons_json, status FROM postings "
+                       "ORDER BY score DESC").fetchall()
     if rows:
         min_score = st.slider("Minimum score", 0, 100, 60)
         data = []
@@ -106,12 +150,13 @@ with matches_tab:
             reasons = json.loads(r["reasons_json"] or "{}")
             if r["score"] >= min_score:
                 data.append({"score": r["score"], "title": r["title"], "company": r["company"],
+                             "portal": r["portal"], "status": r["status"],
                              "matched": ", ".join(reasons.get("matched_skills", [])),
                              "missing": ", ".join(reasons.get("missing_skills", [])),
                              "notes": "; ".join(reasons.get("reasons", []))})
         st.dataframe(pd.DataFrame(data), hide_index=True, width="stretch")
     else:
-        st.info("No postings yet. Save postings as .txt in inbox/postings and run the matcher.")
+        st.info("No jobs yet. Run `python -m copilot.daily` to read your job alerts.")
 
 with skills_tab:
     jobs = load_jobs(con)
@@ -126,8 +171,15 @@ with skills_tab:
         st.info("Run the matcher first.")
 
 with impact_tab:
+    st.subheader("Time saved (your own log)")
     rows = impact_report()
     if rows:
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
     else:
         st.info("Log your time: `python -m copilot.impact log tracking 25 --mode manual`")
+    st.subheader("Daily runs")
+    runs = Path("data/runs.csv")
+    if runs.exists() and not DEMO:
+        st.dataframe(pd.read_csv(runs).tail(30), hide_index=True, width="stretch")
+    else:
+        st.caption("Each `python -m copilot.daily` run adds a row: emails read, jobs found, requests used, seconds.")

@@ -210,3 +210,48 @@ matching merged "Acme 1" and "Acme 2" into one application. See `same_company()`
 9. Add a fifth scenario, "slow responder portal", to `scenarios.py` and its expected answer.
 10. Add a critic rule: `applications_target` must be at least 5 unless the bottleneck is "interview". Add a test.
 11. Run the coach eval with two different models and record accuracy and tokens for each in the README.
+
+---
+
+# Part 3: the job feed and deployment
+
+## 12. How a job alert becomes a shortlist (`copilot/feed/alerts.py`, `copilot/daily.py`)
+
+1. **Fetch.** `copilot.daily` asks Gmail for recent emails from alert senders (`alerts_query`), newest first,
+   skipping any message ID already in the `emails` table.
+2. **Classify (free).** The sender rule marks it `job_alert` with no model call.
+3. **Links by code.** `extract_links()` pulls every `<a href>` with its text and drops unsubscribe, settings,
+   app-store and social links. They're numbered `[1] [2] ...`.
+4. **One model call.** `parse_alert()` sends the email text plus the numbered links and gets back a validated
+   `AlertJobs` list: title, company, location, experience, salary, skills, domains, and a **link number**.
+5. **Code finishes the job.** `years_from()` and `salary_from()` parse "2-5 Yrs" and "8-12 Lacs PA" with regexes.
+   `resolve_link()` turns the link number into a URL, or matches the title to a link's text if the number is wrong.
+6. **De-duplicate.** `job_key()` hashes (title, normalised company), so the same job from Naukri and LinkedIn is stored once.
+   A job you dismissed keeps its status even if it arrives again.
+7. **Score and shortlist.** `score_posting()`, then `shortlist()` returns undecided jobs above `min_score`.
+8. **Budget.** `LLM(max_calls=...)` raises `BudgetExceeded`; `sync()` catches it, stops, and leaves unprocessed
+   emails for the next run, because they were never recorded as seen.
+
+*Say it like this:* "One request per alert email instead of per job made the free tier workable, and the model
+never types a URL: code extracts and numbers links, the model only references them."
+
+## 13. Deployment, in plain words
+
+- **Deploying** = running code somewhere it starts by itself. Here, Windows Task Scheduler runs
+  `scripts\run_daily.bat` every morning, and Streamlit Community Cloud serves the public demo from GitHub.
+- **Why two places:** the real data (your Gmail) should stay on your machine; the public link must contain no personal data, so it runs `COPILOT_DEMO=1` with sample data.
+- **Observability:** every run appends to `data/runs.csv` (emails read, jobs found, requests used, seconds), and
+  traces of every model and tool call go to `runs/*.jsonl`.
+- **Schema migrations:** `db._migrate()` adds new columns to an existing database, so `git pull` never breaks your saved data.
+
+## 14. Part 3 interview questions
+16. **How do jobs get into the system?** Alert emails; why not scraping (terms, blocking, fragility).
+17. **How did you make it affordable?** Rules first, one call per alert, budgets, idempotent re-runs.
+18. **What stops a hallucinated apply link?** Links are extracted by code; the model only references numbers.
+19. **How is it deployed and why that way?** Laptop scheduler for private data plus a cloud demo with sample data.
+20. **What happens if the run is interrupted halfway?** Nothing is lost: unrecorded emails are simply read next time.
+
+## 15. Part 3 exercises
+12. Add a portal: put its alert sender in `DEFAULT_ALERTS_QUERY`, save one of its alert emails into the golden set, run `python -m copilot.feed.eval`.
+13. Add a "posted N days ago" field to `AlertJob` and skip jobs older than 14 days.
+14. Add a column to the shortlist showing which alert a job came from.

@@ -7,7 +7,8 @@ Why not ask the LLM "how good a fit is this, 1-10"?
 The LLM's job is reading messy text into fields (extractor.py). Judging fit is a rule
 you own, can tune, and can defend in an interview line by line.
 
-Weights (sum 100):  required skills 45 · role/title 20 · experience 15 · location 15 · nice-to-have 5
+Weights (sum 100):  required skills 35 · role/title 20 · experience 15 · location 15 · domain 10 · nice-to-have 5
+Unknowns score neutral (0.5), not zero: a job-alert snippet that doesn't list skills shouldn't sink a job.
 Hard filters (score 0): dealbreaker title words, stated salary below your minimum.
 """
 from __future__ import annotations
@@ -18,7 +19,7 @@ from dataclasses import dataclass, field
 from copilot.config import Profile
 from copilot.matcher.schema import JobPosting
 
-WEIGHTS = {"skills": 45, "role": 20, "experience": 15, "location": 15, "nice_to_have": 5}
+WEIGHTS = {"skills": 35, "role": 20, "experience": 15, "location": 15, "domain": 10, "nice_to_have": 5}
 
 
 @dataclass
@@ -91,7 +92,13 @@ def score_posting(job: JobPosting, p: Profile) -> FitScore:
     nice = job.nice_to_have_skills
     nice_part = sum(_has_skill(s, p.skills) for s in nice) / len(nice) if nice else 0.5
 
+    doms = job.domains
+    hits = [d for d in doms if any(d == m or d in m or m in d for m in p.domains)]
+    domain_part = (1.0 if hits else 0.0) if doms else 0.5
+    if hits:
+        reasons.append(f"domain match: {', '.join(hits)}")
+
     parts = {"skills": skill_part, "role": role_part, "experience": exp_part,
-             "location": loc_part, "nice_to_have": nice_part}
+             "location": loc_part, "domain": domain_part, "nice_to_have": nice_part}
     total = round(sum(WEIGHTS[k] * v for k, v in parts.items()), 1)
     return FitScore(total, matched, missing, reasons)

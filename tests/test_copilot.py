@@ -148,7 +148,8 @@ def test_score_rewards_fit_and_explains_gaps():
 
 
 def test_hard_filters_exclude():
-    assert score_posting(job(title="Sales Analyst"), PROFILE).excluded
+    assert score_posting(job(title="Field Sales Executive"), PROFILE).excluded
+    assert not score_posting(job(title="Sales Insights Analyst"), PROFILE).excluded  # FMCG analytics roles stay in
     assert not score_posting(job(title="International Business Analyst"), PROFILE).excluded  # "intern" is a whole word
     low = job(salary_min=300000, salary_max=400000, salary_currency="INR", salary_period="year")
     assert "below your minimum" in score_posting(low, PROFILE).excluded

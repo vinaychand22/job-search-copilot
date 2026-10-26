@@ -17,9 +17,12 @@ from dataclasses import dataclass, field
 from typing import Iterable
 
 from copilot import db
+from copilot.config import Profile
 from copilot.tracker.classifier import CATEGORY_STATUS, classify, detect_portal
 from copilot.tracker.sources import Email
-from core.llm import LLM
+from core.llm import LLM, BudgetExceeded
+
+ALERT_MAX_AGE_DAYS = 7   # older alerts are recorded but not parsed: those jobs are likely filled
 
 
 @dataclass
@@ -31,9 +34,22 @@ class SyncReport:
     status_changes: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     seconds: float = 0.0
+    alerts_parsed: int = 0
+    jobs_found: int = 0
+    new_jobs: int = 0
+    budget_stopped: bool = False   # True if the daily request budget ran out; the rest waits for next run
 
 
-def sync(con: sqlite3.Connection, emails: Iterable[Email], llm: LLM) -> SyncReport:
+def _recent(received_at: str, days: int) -> bool:
+    try:
+        return dt.datetime.fromisoformat(received_at) >= dt.datetime.now() - dt.timedelta(days=days)
+    except ValueError:
+        return True
+
+
+def sync(con: sqlite3.Connection, emails: Iterable[Email], llm: LLM,
+         profile: Profile | None = None) -> SyncReport:
+    """Classify new emails, update applications, and (with a profile) turn job alerts into jobs."""
     t0 = time.perf_counter()
     rep = SyncReport()
     seen = {r[0] for r in con.execute("SELECT message_id FROM emails")}
@@ -43,6 +59,15 @@ def sync(con: sqlite3.Connection, emails: Iterable[Email], llm: LLM) -> SyncRepo
             continue
         try:
             tri, method = classify(e, llm)
+            if tri.category == "job_alert" and profile is not None and _recent(e.received_at, ALERT_MAX_AGE_DAYS):
+                from copilot.feed.alerts import ingest_alert  # local import: feed depends on tracker
+                found, new = ingest_alert(con, e, llm, profile)
+                rep.alerts_parsed += 1
+                rep.jobs_found += found
+                rep.new_jobs += new
+        except BudgetExceeded:   # out of requests for this run: stop cleanly, unprocessed mail waits
+            rep.budget_stopped = True
+            break
         except Exception as ex:  # one bad email must not stop the sync; it is retried next run
             rep.errors.append(f"{e.subject[:60]}: {type(ex).__name__}: {ex}")
             continue

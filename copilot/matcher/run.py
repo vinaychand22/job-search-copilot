@@ -104,6 +104,7 @@ def main() -> None:
         print(f"usage: {llm.usage.summary()}")
 
     if a.report or not a.folder:
+        rescore_all(con)  # free: picks up profile changes without any model calls
         jobs = load_jobs(con)
         print("\nMarket:", market_summary(jobs))
         print("\nSkill demand (share of postings):")

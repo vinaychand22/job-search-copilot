@@ -2,9 +2,10 @@
 
 [![ci](https://github.com/vinaychand22/job-search-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/vinaychand22/job-search-copilot/actions/workflows/ci.yml)
 
-An AI copilot for the parts of a job search that waste the most time: **finding relevant jobs** in a flood
-of postings, **keeping track of every application** across Naukri, LinkedIn, Talent500 and company sites,
-and **working out why applications stall** and what to do next week.
+An AI copilot that runs every morning on its own: it reads my **job-alert emails** from Naukri and LinkedIn,
+ranks every job against my profile and gives me **today's shortlist with apply links**; it reads **company
+replies** and keeps each application's status up to date; and it **diagnoses where my applications stall**
+and plans the next week.
 
 Python · LangGraph · SQLite · Streamlit · model-agnostic (OpenAI, Azure OpenAI, Gemini, local Ollama, or Claude).
 
@@ -24,27 +25,28 @@ So I built the tool I needed, and I measure it on my own search (see [Impact](#i
 
 ```mermaid
 flowchart LR
-    subgraph inputs
-        G[Gmail<br/>read-only]
-        P[Postings saved<br/>from portals]
-        F[Old resume<br/>folders]
+    subgraph gmail[Gmail, read-only]
+        A[Job alerts<br/>Naukri · LinkedIn · ...]
+        R[Company replies]
     end
-    G --> T[Tracker<br/>rules → LLM classify<br/>→ status update]
-    P --> M[Matcher<br/>LLM extract → code scores fit]
-    F --> I[One-time import]
-    T & M & I --> DB[(SQLite<br/>applications · events · emails<br/>postings · plans)]
-    DB --> C[Career coach · LangGraph<br/>analyst agent → planner → critic<br/>→ your approval]
-    C --> DB
-    DB --> D[Streamlit dashboard<br/>funnel · deadlines · follow-ups<br/>coach plan · ranked jobs · skill gaps]
+    A --> F[Job feed<br/>1 LLM call per alert →<br/>every job + apply link]
+    F --> S[Fit score<br/>code, explainable]
+    R --> T[Tracker<br/>rules → LLM classify<br/>→ status update]
+    S & T --> DB[(SQLite<br/>postings · applications<br/>events · plans)]
+    DB --> UI[Dashboard<br/>Today's shortlist: Apply · Applied · Not for me]
+    UI -- Applied --> DB
+    DB --> C[Career coach · LangGraph<br/>analyst → planner → critic → your approval]
+    SCHED[Every morning<br/>Task Scheduler] --> A & R
 ```
 
 | Component | Problem it removes | How it works |
 |---|---|---|
-| **Application tracker** | Manually working out each application's status from email | Reads job-search emails (read-only). Rules handle alerts and OTPs for free; the model classifies the rest (applied, assessment, interview, rejection, offer, recruiter), extracts company, role and deadline, and advances the application. Never processes an email twice. |
-| **Job matcher** | Reading dozens of irrelevant postings | The model turns a pasted posting into structured fields; a transparent scoring rule (skills 45, role 20, experience 15, location 15, nice-to-have 5, plus hard filters) ranks them and lists the skills you're missing. |
-| **Career coach** (multi-agent, LangGraph) | Not knowing *why* applications fail | An **analyst agent** queries your own data through tools (funnel by portal and role family, read-only SQL, skill gaps) and must cite numbers that actually came from those tools, or its diagnosis is rejected. A **planner** turns the diagnosis into next week's plan. A **code critic** checks the hour budget, that the plan targets the bottleneck, and that it doesn't double down on your worst segment. The graph then **pauses for your approval** before anything is saved. |
-| **Market report** | Guessing what to learn next | Aggregates skill demand across every posting you've collected and lists the top gaps. |
-| **Dashboard** | No single view of the search | Funnel and conversion by portal, upcoming deadlines, follow-ups due, ranked matches, skill demand, impact log. |
+| **Job feed** | Reading every alert and posting to find the few that fit | Alert emails are read automatically. Code extracts and numbers the job links; **one model call per alert** lists every job (title, company, location, experience, salary, skills, domain) and points to a link number, so the model never types a URL. Code parses salary/experience, removes duplicates across portals, and scores each job. |
+| **Fit score** | "Is this job for me?" | A transparent formula: skills 35, role 20, experience 15, location 15, domain 10, nice-to-have 5, plus hard filters (dealbreaker titles, minimum salary). Every score comes with reasons and missing skills. |
+| **Today's shortlist** | Deciding where to apply | Jobs above your minimum score, best first, with **Open & apply**, **Applied** (starts tracking the application) and **Not for me** (never shown again). |
+| **Application tracker** | Working out each application's status from email | Rules handle alerts and OTPs for free; the model classifies the rest (applied, assessment, interview, rejection, offer, recruiter), extracts company, role and deadline, and moves the application forward. |
+| **Career coach** (multi-agent, LangGraph) | Not knowing *why* applications fail | An **analyst agent** queries your own data through tools and must cite numbers that came from those tools, or its diagnosis is rejected. A **planner** writes next week's plan, a **code critic** checks it, and the graph **pauses for your approval**. |
+| **Daily run** | Remembering to do all of the above | `python -m copilot.daily`, scheduled every morning, within a fixed request budget; logs every run to `data/runs.csv`. |
 
 ## Impact
 
@@ -52,6 +54,9 @@ Measured on my own search. Every number here comes from a script; nothing is est
 
 | What | Before (manual) | With copilot | How it's measured |
 |---|---|---|---|
+| Time to go through job alerts each day | _fill_ | _fill_ | `python -m copilot.impact log alerts <min> --mode manual/copilot` |
+| Jobs read automatically per day | — | _fill_ | `data/runs.csv` (`jobs_found`) |
+| Alert reading accuracy (jobs found, right link) | — | _fill_ | `python -m copilot.feed.eval --data my_alerts.jsonl` |
 | Daily tracking time | _fill from impact log_ | _fill_ | `python -m copilot.impact report` (median minutes, n ≥ 5 each) |
 | Time to triage postings | _fill_ | _fill_ | same, task `finding_jobs` |
 | Email classification accuracy | — | _fill_ | `python -m copilot.tracker.eval --data my_labelled_emails.jsonl` |
@@ -65,59 +70,51 @@ so it only proves the rule behaves as designed. The real number comes from posti
 
 ## Quick start
 
-Requires Python 3.11 or newer and Git. Your `.env` file is loaded automatically.
+Requires Python 3.11+ and Git. The `.env` file is loaded automatically.
 
-**Windows (PowerShell)**
-```powershell
-git clone https://github.com/vinaychand22/job-search-copilot.git; cd job-search-copilot
-py -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python -m pytest -q          # 34 offline tests, no API key needed
-python -m copilot.demo       # builds a demo database
-$env:COPILOT_DB="data\demo.db"; streamlit run app.py
+**Windows (Command Prompt)**: one line at a time
 ```
+git clone https://github.com/vinaychand22/job-search-copilot.git
+cd job-search-copilot
+py -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python -m pytest -q
+set COPILOT_DEMO=1
+python -m streamlit run app.py
+```
+The tests run offline with no API key; `COPILOT_DEMO=1` shows the dashboard with sample data
+(close the window, or run `set COPILOT_DEMO=`, to switch back to your own data).
 
 **macOS / Linux**
 ```bash
 git clone https://github.com/vinaychand22/job-search-copilot.git && cd job-search-copilot
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-make test && make demo
+make test && COPILOT_DEMO=1 streamlit run app.py
 ```
 
 ### Use it for real
+1. **AI model:** `copy .env.example .env`, add a key (free options in [docs/SETUP.md](docs/SETUP.md)), check with `python -m core.check`.
+2. **Your profile:** `copy config\profile.example.toml config\profile.toml` and edit skills, domains, roles, cities, minimum score.
+3. **Gmail + job alerts + morning schedule:** follow [docs/DEPLOY.md](docs/DEPLOY.md).
+4. Every day: open the dashboard (`python -m streamlit run app.py`) → **Today's shortlist**.
 
-```bash
-# copy the templates (Windows: use "copy" instead of "cp")
-cp config/profile.example.toml config/profile.toml   # edit: your skills, target roles, cities, minimum salary
-cp .env.example .env                                  # choose a model provider: see docs/SETUP.md (free options exist)
+Other commands: `python -m copilot.daily --demo` (sample alerts, no Gmail) ·
+`python -m copilot.folders "<Resumes folder>"` (import old folders) ·
+`python -m copilot.coach.run --hours 8` (weekly plan) · `python -m copilot.matcher.run --report` (rescore, free).
 
-python -m copilot.folders "<path to your Resumes folder>" --dry-run   # preview the import of your old folders
-python -m copilot.folders "<path to your Resumes folder>"             # import them
-
-python -m copilot.tracker.run --max 100     # first Gmail sync (opens a browser once for consent)
-python -m copilot.matcher.run inbox/postings
-python -m copilot.coach.run --hours 8 --goal "Data analyst role in Hyderabad or remote"
-streamlit run app.py
-```
-
-### Gmail setup (one time, about 10 minutes)
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/), create a project, and enable the **Gmail API**.
-2. Under **OAuth consent screen**, choose *External* and add your own Gmail address as a **test user**.
-3. Under **Credentials → Create credentials → OAuth client ID**, choose **Desktop app**, then download the JSON.
-4. Save it as `config/credentials.json` (gitignored). The first sync opens a browser for consent and saves `config/token.json`.
-
-The app requests only the `gmail.readonly` scope, so it cannot send, delete or change mail.
-
-### Label your own emails (for a real accuracy number)
-Add lines like this to `my_labelled_emails.jsonl` (keep it outside git):
-```json
-{"message_id":"x1","sender":"...","subject":"...","received_at":"2026-10-01T10:00:00","body":"...","expected":{"category":"assessment","company":"Acme","action_required":true,"deadline":"2026-10-03"}}
-```
+### Label your own data (for real accuracy numbers)
+Save real alert or reply emails in `my_alerts.jsonl` / `my_labelled_emails.jsonl` (keep them outside git),
+in the format of `copilot/feed/data/alerts_golden.jsonl` and `copilot/tracker/data/emails_golden.jsonl`,
+then run the evals with `--data`.
 
 ## Design decisions
+
+- **Bring the jobs to the user.** Jobs come from alert emails the user already receives, not from scraping job sites (against their terms, and blocked) or manual pasting.
+- **One model call per alert, not per job.** A 15-job alert costs one request, which keeps a free tier (about 20 requests/day) workable. A per-run request budget stops cleanly and leaves the rest for the next run.
+- **The model never writes URLs.** Code extracts and numbers the links; the model answers "job 3 is link #7", and a wrong number falls back to matching the link text against the job title.
+- **Deployed in two places on purpose.** The real copilot runs on the user's laptop (personal email never leaves it); a public demo with sample data runs on Streamlit Community Cloud.
 
 - **Model-agnostic.** One internal message format, with small adapters for OpenAI-compatible APIs (OpenAI, Azure, Gemini, Ollama) and Anthropic. Switching vendors is a `.env` change, and comparing them is an eval run.
 - **Workflows where possible, agents where needed.** Tracker and matcher are fixed pipelines. Only the coach's analyst is an autonomous tool-using agent, because what it needs to look up depends on what it finds.
@@ -133,7 +130,8 @@ Add lines like this to `my_labelled_emails.jsonl` (keep it outside git):
 
 ## Privacy
 Everything stays on your machine: one SQLite file in `data/`. Your profile, Gmail credentials and token are gitignored.
-Email text is sent to the model API only for emails the rules can't classify, and only the first 3,000 characters.
+Email text is sent to the model API only when needed: replies the rules can't classify (first 3,000 characters)
+and job-alert emails (job listings only, up to 20,000 characters).
 To keep email fully private, run the tracker with a local model (`LLM_PROVIDER=ollama`).
 
 ## Roadmap
@@ -142,9 +140,11 @@ To keep email fully private, run the tracker with a local model (`LLM_PROVIDER=o
 - [x] Dashboard and impact logging
 - [x] Model-agnostic LLM layer (OpenAI, Azure, Gemini, Ollama, Claude)
 - [x] Career coach: LangGraph multi-agent workflow with evidence checks and human approval
+- [x] Job feed from alert emails, daily shortlist with apply links, domain matching
+- [x] Deployment: morning schedule on Windows, public demo on Streamlit Community Cloud
 - [ ] Semantic job matching: embeddings plus hybrid ranking against your resume
 - [ ] MCP server: query your tracker from Claude Desktop, Cursor or ChatGPT
-- [ ] Production: FastAPI, Postgres, scheduled sync worker, Docker, Langfuse tracing, CI with eval gates, live demo
+- [ ] Production: FastAPI, Postgres, cloud worker, Docker, Langfuse tracing, CI with eval gates
 - [ ] Analytics copilot: natural language to SQL on a public retail dataset, with an execution-accuracy eval
 
 ## License
@@ -154,6 +154,8 @@ MIT. See [LICENSE](LICENSE).
 ```
 app.py                    Streamlit dashboard
 copilot/db.py             SQLite schema and status rules (shared memory)
+copilot/daily.py          the morning run: alerts -> jobs, replies -> statuses, shortlist, run log
+copilot/feed/             job-alert reader, shortlist and decisions, eval
 copilot/tracker/          Gmail source, classifier, sync pipeline, eval
 copilot/matcher/          extractor, scoring, market report, eval
 copilot/coach/            LangGraph coach: tools, schemas, graph, scenarios, eval
@@ -162,6 +164,8 @@ copilot/folders.py        one-time import of resume folders
 copilot/impact.py         before/after time logging
 core/                     model-agnostic LLM layer, agent loop, structured output + repair, eval harness
 docs/SETUP.md             how to get an API key (free options included)
+docs/DEPLOY.md            Gmail, job alerts, morning schedule, public demo
+scripts/run_daily.bat     what Windows Task Scheduler runs
 tests/                    offline tests with a scripted fake LLM
 ```
 See [LEARN.md](LEARN.md) for a guided walkthrough of how every part works.

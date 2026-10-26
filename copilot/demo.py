@@ -38,10 +38,13 @@ def build(path: Path = DEMO_DB) -> Path:
         con.execute("INSERT INTO emails VALUES (?,?,?,?,?,?,?,?)", (e["message_id"], e["sender"], e["subject"],
                     e["received_at"], exp["category"], "gold", app_id, db.now()))
     profile = load_profile()
-    for c in load_jsonl(HERE / "matcher/data/postings_golden.jsonl"):
+    for i, c in enumerate(load_jsonl(HERE / "matcher/data/postings_golden.jsonl")):
         job = JobPosting.model_validate(c["expected"])
         fit = score_posting(job, profile)
-        db.save_posting(con, content_hash(c["text"]), c["id"], job.model_dump(), fit.score, fit.as_dict())
+        portal = ["Naukri", "LinkedIn"][i % 2]
+        db.save_posting(con, content_hash(c["text"]), c["id"], job.model_dump(), fit.score, fit.as_dict(),
+                        url=f"https://example.com/demo-job/{c['id']}", portal=portal, origin="alert",
+                        received_at=db.now())
     # A sample coach plan so the "Coach plan" tab has something to show (normally produced by
     # `python -m copilot.coach.run` and saved only after you approve it).
     diag = {"findings": ["Demo data: 8 applications tracked, 0.5 response rate"], "stalls_at": "interview",
